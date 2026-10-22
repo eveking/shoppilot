@@ -17,6 +17,7 @@ data/
 # Node
 node_modules/
 web/dist/
+web/tsconfig.tsbuildinfo
 
 # IDE / 工具
 .idea/
