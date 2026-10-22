@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# 运行时数据
+*.db
+*.sqlite3
+data/
+
+# 环境变量
+.env
+
+# Node
+node_modules/
+web/dist/
+
+# IDE / 工具
+.idea/
+.vscode/
+.pytest_cache/
+.ruff_cache/

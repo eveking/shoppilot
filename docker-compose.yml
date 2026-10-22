@@ -1,0 +1,15 @@
+services:
+  shoppilot:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      SHOPILOT_LLM_BASE_URL: ${SHOPILOT_LLM_BASE_URL:-https://api.deepseek.com/v1}
+      SHOPILOT_LLM_API_KEY: ${SHOPILOT_LLM_API_KEY:-}
+      SHOPILOT_LLM_MODEL: ${SHOPILOT_LLM_MODEL:-deepseek-chat}
+      SHOPILOT_IDENTITY_SECRET: ${SHOPILOT_IDENTITY_SECRET:-change-me-to-a-long-random-secret}
+      SHOPILOT_DEMO_MODE: ${SHOPILOT_DEMO_MODE:-true}
+      SHOPILOT_DATABASE_URL: sqlite+aiosqlite:////app/data/shoppilot.db
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

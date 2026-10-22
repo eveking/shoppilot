@@ -1,0 +1,120 @@
+"""HTTP 路由：/health、/sessions、/chat（SSE）。"""
+
+import json
+import logging
+
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
+
+from shoppilot.api.schemas import ChatRequest, CreateSessionRequest
+from shoppilot.core.agent import AgentEvent, run_chat
+from shoppilot.core.context_builder import build_messages, build_system_prompt
+from shoppilot.identity.provider import Identity
+from shoppilot.identity.signing import ExpiredToken, TokenError
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
+
+
+def _row_to_message(row) -> dict:
+    msg = {"role": row.role}
+    if row.content is not None:
+        msg["content"] = row.content
+    if row.tool_calls:
+        msg["tool_calls"] = json.loads(row.tool_calls)
+    if row.tool_call_id:
+        msg["tool_call_id"] = row.tool_call_id
+    return msg
+
+
+@router.get("/health")
+async def health(request: Request) -> dict:
+    settings = request.app.state.settings
+    return {
+        "status": "ok",
+        "version": request.app.version,
+        "demo_mode": settings.demo_mode,
+        "llm_model": settings.llm_model,
+    }
+
+
+@router.post("/sessions", status_code=201)
+async def create_session(body: CreateSessionRequest, request: Request) -> dict:
+    state = request.app.state
+    if (body.token is None) == (body.user_id is None):
+        raise HTTPException(
+            status_code=400,
+            detail="token 与 user_id 必须二选一（demo 模式传 user_id，生产模式传 token）",
+        )
+    if body.user_id is not None:
+        if not state.settings.demo_mode:
+            raise HTTPException(status_code=400, detail="demo 模式已关闭，请携带签名 token")
+        raw_token = body.user_id
+    else:
+        raw_token = body.token  # type: ignore[assignment]
+    try:
+        identity = await state.identity_provider.verify(raw_token)
+    except ExpiredToken:
+        raise HTTPException(status_code=401, detail="token 已过期，请重新签发") from None
+    except TokenError as exc:
+        raise HTTPException(status_code=401, detail=f"身份校验失败: {exc}") from None
+    session = await state.repo.create_session(user_id=identity.user_id)
+    return {
+        "session_id": session.id,
+        "user_id": session.user_id,
+        "demo_mode": state.settings.demo_mode,
+    }
+
+
+@router.post("/chat")
+async def chat(body: ChatRequest, request: Request) -> StreamingResponse:
+    state = request.app.state
+    session = await state.repo.get_session(body.session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="会话不存在或已失效")
+
+    message = body.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="消息不能为空")
+
+    settings = state.settings
+    history_rows = await state.repo.list_messages(session.id)
+    await state.repo.append_message(session.id, actor=session.user_id, role="user", content=message)
+
+    messages = build_messages(
+        history=[_row_to_message(r) for r in history_rows],
+        user_message=message,
+        system_prompt=build_system_prompt(state.registry.toolsets),
+        max_messages=settings.context_max_messages,
+    )
+    identity = Identity(user_id=session.user_id)
+
+    async def persist(**kwargs) -> None:
+        await state.repo.append_message(session.id, actor=session.user_id, **kwargs)
+
+    async def event_stream():
+        try:
+            async for event in run_chat(
+                llm=state.llm,
+                registry=state.registry,
+                messages=messages,
+                identity=identity,
+                session_id=session.id,
+                max_rounds=settings.agent_max_tool_rounds,
+                tool_result_max_chars=settings.tool_result_max_chars,
+                persist=persist,
+            ):
+                yield f"data: {event.model_dump_json(exclude_none=True)}\n\n"
+        except Exception:
+            logger.exception("会话 %s 对话流异常", session.id)
+            error_event = AgentEvent(type="error", error="服务内部异常，请稍后重试")
+            yield f"data: {error_event.model_dump_json(exclude_none=True)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers=_SSE_HEADERS)
