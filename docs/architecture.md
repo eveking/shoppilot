@@ -16,6 +16,9 @@
 ┌────────────────────▼──────────────────────────────┐
 │  API 层  FastAPI                                   │
 │    POST /sessions   创建会话（校验签名 Token）        │
+│    GET  /sessions   会话列表（最近活跃倒序）           │
+│    GET  /sessions/{id}/messages   历史读回(用户视角)  │
+│    GET  /sessions/{id}/events     审计读回(全量)      │
 │    POST /chat       Agent 循环，SSE 事件流           │
 │    GET  /health                                      │
 ├───────────────────────────────────────────────────┤

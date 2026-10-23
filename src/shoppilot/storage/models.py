@@ -39,6 +39,8 @@ class ChatSession(Base, PublicFieldsMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     user_id: Mapped[str] = mapped_column(String(64), index=True)
+    # 最近一次追加消息的时间（会话列表排序依据，ADR-0011）；新建会话为 NULL
+    last_message_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<ChatSession id={self.id} user_id={self.user_id}>"

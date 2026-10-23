@@ -17,5 +17,8 @@ class CreateSessionResponse(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    """生产模式需携带 token（Authorization 头优先，body 兜底）；demo 模式无需。"""
+
     session_id: str
     message: str
+    token: str | None = None

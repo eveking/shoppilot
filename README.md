@@ -190,7 +190,12 @@ class LogisticsToolSet(ToolSet):
 |---|---|---|
 | GET | `/health` | 健康检查与运行模式 |
 | POST | `/sessions` | 创建会话。demo 模式传 `{"user_id": "…"}`；生产传 `{"token": "…"}` |
-| POST | `/chat` | `{"session_id": "…", "message": "…"}`，返回 SSE 流 |
+| GET | `/sessions` | 当前用户会话列表，按最近活跃倒序。生产传 `Authorization: Bearer <token>`；demo 传 `?user_id=`。支持 `?limit=` |
+| GET | `/sessions/{id}/messages` | 历史读回（用户视角）：只含 user/assistant 消息。游标分页 `?limit=50&before=<message_id>`，返回 `{has_more, messages}` |
+| GET | `/sessions/{id}/events` | 审计读回：全量消息含 tool 调用与结果，分页参数同上 |
+| POST | `/chat` | `{"session_id": "…", "message": "…"}`，返回 SSE 流。生产模式需带 token（Authorization 头优先，body `token` 字段兜底） |
+
+生产模式下除 `/health`、`POST /sessions` 外的所有会话接口均要求 token，且 token 对应的 user_id 必须等于会话归属者，否则返回 404（不泄露会话存在性）；demo 模式豁免。详见 ADR-0011。
 
 `/chat` SSE 事件（`data: {json}\n\n`）：
 

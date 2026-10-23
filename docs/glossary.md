@@ -31,5 +31,10 @@
 | **Agent 循环（Agent Loop）** | 单轮请求的核心执行流：模型回复 ↔ function calling 工具执行往复，直到产出最终回答或达轮次上限 |
 | **ToolRegistry** | 工具注册表：收集各 ToolSet 的工具，转成模型侧 schema；工具名命名空间化为 `领域__工具名` |
 | **会话（Session）** | 一次多轮对话的持久化单元，绑定 Identity；含有序消息列表 |
+| **所有权校验（Ownership Check）** | 会话相关接口的鉴权不变量：请求者 token 解析出的 `user_id` 必须等于会话归属者，否则 404/403；demo 模式豁免（ADR-0011） |
+| **历史读回（Read-back）** | 把已落库的历史经 HTTP 查回的能力。用户消息读回（`GET /sessions/{id}/messages`，不透出 tool 消息）与审计事件读回（`GET /sessions/{id}/events`，全量）是两个契约（ADR-0011） |
+| **审计事件（Audit Events）** | 会话内全部落库消息（含 tool 调用与结果）的完整视图，供排查/审计；与终端用户可见的消息读回严格分开 |
+| **游标分页（Cursor Pagination）** | 用 `before=<message_id>` + `limit` 取游标之前一页的分页方式；不用 offset，避免并发追加时页漂移 |
+| **最近活跃（last_message_at）** | sessions 表的专用字段，append_message 时写入，会话列表按其倒序；不借用公共字段 `updated_at` 承载此语义 |
 | **示例集成（Sample Integration）** | 内置聊天窗、MockShopAdapter、种子数据的统一定位——证明接缝可用，非产品本体 |
 | **SSE 事件** | `/chat` 流式接口的事件协议：`message.delta` / `tool_call.started` / `tool_call.completed` / `done` / `error` |
